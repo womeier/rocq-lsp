@@ -70,8 +70,23 @@ See https://code.visualstudio.com/updates/v1_72#_towards-cross-origin-isolation
 
 ## WASM
 
-We hope to have a WASM backend working soon, based on waCoq, see
-https://github.com/microsoft/vscode-wasm
+Build the Wasm worker and its runtime dependencies with:
+
+```sh
+nix develop -c make wasm-bin
+```
+
+The output is written to `editor/code/wasm-bin`. `make extension` also builds
+the extension bundles. The Nix shell supplies Dune and a Wasm C compiler,
+including the linker and WASI headers.
+
+Outside Nix, set `WASM_CC` to the path of a WASI SDK `clang` executable.
+It defaults to `/opt/wasi-sdk/bin/clang`, as used in CI.
+
+Browser execution remains experimental and requires the 32-bit OCaml setup
+used in CI. Building with the default Nix shell does not verify browser
+runtime compatibility. The standard-library filesystem is packaged separately
+with `make editor/code/wasm-bin/core-fs.zip`.
 
 ## Filesystem layout
 

@@ -1,0 +1,3 @@
+(test
+ (name notation_roundtrip)
+ (libraries coq-lsp.serlib))

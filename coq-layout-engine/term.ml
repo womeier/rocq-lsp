@@ -99,35 +99,47 @@ let _debug = ref false
 let env = ref Environ.empty_env
 let sigma = ref Evd.empty
 
-let rec ly_hunks unp args =
-  let open Ppextend in
-  match unp with
-  | [] -> []
-  | (UnpMetaVar _ | UnpBinderMetaVar _) :: l ->
-    let la = List.hd args in
-    let lr = ly_hunks l (List.tl args) in
-    la :: lr
-  | UnpTerminal s :: l -> BM.Constant s :: ly_hunks l args
-  | UnpBox (_, l1) :: l ->
-    let l1 = List.map (fun (_, l) -> l) l1 in
-    ly_hunks (l1 @ l) args
-  | (UnpCut _ as unp) :: l -> ly_hunks l args
-  | UnpListMetaVar (_ntn_entry_r_lvl, _upl) :: l -> [ xxx "UnpListMetaVar" ]
-  | UnpBinderListMetaVar (_open_binder, _quote_print, _upl) :: l ->
-    [ xxx "UnpListMetaVar" ]
-
-(* | _ -> [ xxx "not_printer" ] *)
+let ly_notation oscope key (terms, termlists, binders, binderlists) =
+  let { Ppextend.notation_printing_unparsing; notation_printing_level = _ } =
+    Ppextend.find_notation_printing_rule oscope key
+  in
+  (* Rocq stores each kind of argument separately, not in unparsing order. *)
+  let terms = ref terms and termlists = ref termlists in
+  let binders = ref binders and binderlists = ref binderlists in
+  let args = ref [] in
+  let pop queue =
+    let arg = List.hd !queue in
+    queue := List.tl !queue;
+    args := arg :: !args;
+    arg
+  in
+  let rec ly_hunks unp =
+    let open Ppextend in
+    match unp with
+    | [] -> []
+    | (UnpMetaVar _ | UnpBinderMetaVar _ | UnpListMetaVar _
+      | UnpBinderListMetaVar _) as h :: l ->
+      let queue =
+        match h with
+        | UnpMetaVar _ -> terms
+        | UnpBinderMetaVar _ -> binders
+        | UnpListMetaVar _ -> termlists
+        | _ -> binderlists
+      in
+      let arg = pop queue in
+      let rest = ly_hunks l in
+      arg :: rest
+    | UnpTerminal s :: l -> BM.Constant s :: ly_hunks l
+    | UnpBox (_, l1) :: l -> ly_hunks (List.map snd l1 @ l)
+    | UnpCut _ :: l -> ly_hunks l
+  in
+  let pretty = ly_hunks notation_printing_unparsing in
+  (List.rev !args, pretty)
 
 let lname_to_string =
   CAst.with_val (function
     | Names.Anonymous -> "_"
     | Names.Name id -> Names.Id.to_string id)
-
-let ly_notation key args =
-  let { Ppextend.notation_printing_unparsing; notation_printing_level } =
-    Ppextend.find_notation_printing_rule None key
-  in
-  ly_hunks notation_printing_unparsing args
 
 let rec ly_qid qid =
   let id_info = Coq_util.Id.make qid in
@@ -152,22 +164,16 @@ and ly_binder_expr (b : local_binder_expr) =
   | CLocalPattern pat ->
     { BM.Binder.namel = [ "XXX localpat" ]; typ = xxx "local pat" }
 
-and ly_notation_arg (a : notation_arg_type_expr) =
-  match a with
-  | NtnTypeArg (NtnTypeArgConstr c) -> layout c
-  | NtnTypeArg (NtnTypeArgPattern (p, _bk)) ->
-    let name =
-      Ppconstr.pr_cases_pattern_expr ~flags:(Ppconstr.current_flags ()) p
-      |> Pp.string_of_ppcmds
-    in
-    let typ = None in
-    BM.Variable { name; typ }
-    (* We'd like to introduce a binder here, kind of...? Maybe it is better to
-       support that in the notation box natively *)
-    (* [ Abs { kind; binderl; v } ] *)
-  | NtnTypeArg (NtnTypeArgBinders _) -> xxx "notation binders"
-  | NtnTypeArgList _ -> xxx "notation list"
-  | NtnTypeArgTuple _ -> xxx "notation tuple"
+and ly_notation_binder ((p, _bk) : kinded_cases_pattern_expr) =
+  let name =
+    Ppconstr.pr_cases_pattern_expr ~flags:(Ppconstr.current_flags ()) p
+    |> Pp.string_of_ppcmds
+  in
+  let typ = None in
+  BM.Variable { name; typ }
+  (* We'd like to introduce a binder here, kind of...? Maybe it is better to
+     support that in the notation box natively *)
+  (* [ Abs { kind; binderl; v } ] *)
 
 and layout t =
   if !_debug then
@@ -245,26 +251,20 @@ and layout t =
       Cast (p_c, p_e)
     (* | CNotation of notation_with_optional_scope option * notation *
        constr_notation_substitution *)
-    | CNotation (oscope, ntn, ntn_subst) ->
-      let key = ntn.ntn_key in
-      let args = List.map ly_notation_arg ntn_subst in
-      let pretty = ly_notation ntn args in
+    | CNotation
+        (oscope, ((_, key) as ntn), (terms, termlists, binders, binderlists)) ->
+      let terms = List.map layout terms in
+      let termlists = List.map (fun _ -> xxx "notation list") termlists in
+      let binders = List.map ly_notation_binder binders in
+      let binderlists = List.map (fun _ -> xxx "notation binders") binderlists in
+      let args, pretty =
+        ly_notation oscope ntn (terms, termlists, binders, binderlists)
+      in
       let raw =
         Coq_util.notation_raw !env !sigma t
         |> Option.cata layout (xxx "raw notation failed [binders usually]")
       in
       Notation { key; args; pretty; raw }
-
-
-    (* ntn_subst is a list of notation_arg_type_expr, one per notation
-       variable, in the order of the unparsing rule:
-
-       NtnTypeArg (NtnTypeArgConstr c)   (* for constr subterms *)
-       NtnTypeArg (NtnTypeArgPattern p)  (* for binders *)
-       NtnTypeArg (NtnTypeArgBinders bl) (* for binder lists (recursive notations) *)
-       NtnTypeArgList l                  (* for recursive notations *)
-       NtnTypeArgTuple l
-    *)
 
     (* Unparsing for "_ + _":
 

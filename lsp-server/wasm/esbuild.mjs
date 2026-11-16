@@ -91,4 +91,4 @@ function wasmBuild(file) {
 // Build of the WASM worker for VSCode
 var wasmWorker = wasmBuild("./wacoq_worker.ts");
 
-await Promise.all[wasmWorker];
+await wasmWorker;

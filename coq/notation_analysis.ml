@@ -21,9 +21,41 @@ let with_def_attributes ~atts f =
 
 open Constrexpr
 
+(* Mirror Constrintern's private normalization of sumbool/sumor notations. *)
+let contract_curly_brackets ntn (terms, termlists, binders, binderlists) =
+  let rec wildcards key n =
+    if Int.equal n (String.length key) then []
+    else
+      let rest = spaces key (n + 1) in
+      if key.[n] = '_' then n :: rest else rest
+  and spaces key n =
+    if Int.equal n (String.length key) then []
+    else if key.[n] = ' ' then wildcards key (n + 1)
+    else spaces key (n + 1)
+  in
+  let expand key n =
+    let pos = List.nth (wildcards key 0) n in
+    String.sub key 0 pos ^ "{ _ }"
+    ^ String.sub key (pos + 1) (String.length key - pos - 1)
+  in
+  match ntn with
+  | InCustomEntry _, _ -> ntn, (terms, termlists, binders, binderlists)
+  | InConstrEntry, key ->
+    let key = ref key in
+    let rec contract n = function
+      | [] -> []
+      | { CAst.v = CNotation (None, (InConstrEntry, "{ _ }"), ([a], [], [], [])); _ }
+        :: rest ->
+        key := expand !key n;
+        contract n (a :: rest)
+      | arg :: rest -> arg :: contract (n + 1) rest
+    in
+    let terms = contract 0 terms in
+    (InConstrEntry, !key), (terms, termlists, binders, binderlists)
+
 let save_notation accu intenv loc ntn ntnargs =
   (* Adjust to parsing of { } *)
-  let ntn, fullargs = Constrexpr_ops.contract_curly_brackets ntn ntnargs in
+  let ((_, key) as ntn), fullargs = contract_curly_brackets ntn ntnargs in
   (* Recover interpretation { } *)
   let _, df = Notation.interp_notation ?loc ntn (intern_subscopes intenv) in
   let posl = Constrexpr_ops.ntn_loc ?loc fullargs ntn in
@@ -32,7 +64,7 @@ let save_notation accu intenv loc ntn ntnargs =
     ((List.map Loc.make_loc posl)
     , (Names.DirPath.to_string path)
     , (Names.DirPath.to_string secpath)
-    , ntn.ntn_key
+    , key
     , sc)
     :: !accu
 

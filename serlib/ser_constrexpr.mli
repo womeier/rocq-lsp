@@ -97,7 +97,9 @@ and fix_expr             = Constrexpr.fix_expr
 and cofix_expr           = Constrexpr.cofix_expr
 and fixpoint_order_expr = Constrexpr.fixpoint_order_expr
 and local_binder_expr    = Constrexpr.local_binder_expr
-and notation_substitution = Constrexpr.notation_substitution
+and kinded_cases_pattern_expr = Constrexpr.kinded_cases_pattern_expr
+and cases_pattern_notation_substitution = Constrexpr.cases_pattern_notation_substitution
+and constr_notation_substitution = Constrexpr.constr_notation_substitution
 [@@deriving sexp, yojson, hash,compare]
 
 type constr_pattern_expr = Constrexpr.constr_pattern_expr [@@deriving sexp,yojson,hash,compare]

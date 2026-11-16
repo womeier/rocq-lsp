@@ -49,7 +49,7 @@ let coq_init opts =
 
   (* Core Coq initialization *)
   Lib.init ();
-  Global.set_VM opts.vm;
+  Global.set_VM (opts.vm && Coq_config.bytecode_compiler);
   Global.set_native_compiler false;
 
   if opts.debug then CDebug.set_flags "backtrace";

@@ -33,6 +33,21 @@
         coqpkg = pkgs.coqPackages_8_20;
         coqPackages = coqpkg.coqPackages;
         ocamlPackages = coqpkg.coq.ocamlPackages;
+        dune = pkgs.dune_3.overrideAttrs (_: rec {
+          version = "3.23.1";
+          src = pkgs.fetchurl {
+            url = "https://github.com/ocaml/dune/releases/download/${version}/dune-${version}.tbz";
+            hash = "sha256-k7TnFX9rqP62HPxfhgCO/SxZA3unigF9krSr8wYyNI8=";
+          };
+        });
+        wasmClang = pkgs.writeShellScriptBin "wasm-clang" ''
+          exec ${pkgs.llvmPackages_12.clang-unwrapped}/bin/clang \
+            -B${pkgs.llvmPackages_12.lld}/bin \
+            -resource-dir=${pkgs.llvmPackages_12.clang-unwrapped.lib}/lib/clang/${pkgs.llvmPackages_12.clang-unwrapped.version} \
+            --sysroot=${pkgs.pkgsCross.wasi32.wasilibc.dev} \
+            -isystem ${pkgs.pkgsCross.wasi32.wasilibc.dev}/include \
+            "$@"
+        '';
       in {
         packages.default = config.packages.coq-lsp;
 
@@ -87,10 +102,12 @@
 
         devShells.default = pkgs.mkShell {
           inputsFrom = [config.packages.coq-lsp];
+          WASM_CC = "${wasmClang}/bin/wasm-clang";
 
           packages = l.attrValues {
+            inherit dune;
             inherit (config.treefmt.build) wrapper;
-            inherit (pkgs) dune_3 nodejs dune-release;
+            inherit (pkgs) nodejs dune-release;
             inherit (ocamlPackages) ocaml ocamlformat ocaml-lsp;
           };
         };

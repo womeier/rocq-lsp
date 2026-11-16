@@ -56,7 +56,6 @@ module Notationextern = Ser_notationextern
 module Util          = Ser_util
 module Gentactic = Ser_gentactic
 module Control = Ser_control
-module Proof = Ser_proof
 
 type coercion_class = [%import: Vernacexpr.coercion_class]
   [@@deriving sexp,yojson,hash,compare]
@@ -285,10 +284,6 @@ type equality_scheme_type =
 
 type scheme =
   [%import: Vernacexpr.scheme]
-  [@@deriving sexp,yojson,hash,compare]
-
-type subproof_kind =
-  [%import: Vernacexpr.subproof_kind]
   [@@deriving sexp,yojson,hash,compare]
 
 type section_subset_expr =
